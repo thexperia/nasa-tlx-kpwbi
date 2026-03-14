@@ -4,12 +4,12 @@ import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc } from "fireb
 
 // 🔥 FIREBASE CONFIG — ganti dengan config milik Anda
 const firebaseConfig = {
-  apiKey: "AIzaSyBJ8Bpgn1LTCXW8W9Px7JYxiwckeztrUkc",
-  authDomain: "nasa-tlx-diy.firebaseapp.com",
-  projectId: "nasa-tlx-diy",
-  storageBucket: "nasa-tlx-diy.firebasestorage.app",
-  messagingSenderId: "336952540129",
-  appId: "1:336952540129:web:3005cfce9a3b33ebd7f0a0"
+  apiKey: "GANTI_DENGAN_API_KEY_ANDA",
+  authDomain: "GANTI_DENGAN_AUTH_DOMAIN_ANDA",
+  projectId: "GANTI_DENGAN_PROJECT_ID_ANDA",
+  storageBucket: "GANTI_DENGAN_STORAGE_BUCKET_ANDA",
+  messagingSenderId: "GANTI_DENGAN_MESSAGING_SENDER_ID_ANDA",
+  appId: "GANTI_DENGAN_APP_ID_ANDA",
 };
 const app = initializeApp(firebaseConfig);
 const db  = getFirestore(app);
@@ -64,13 +64,14 @@ function computeScore(ratings, weights) {
 
 function toCSV(rows) {
   const h = ["Nama","NIP","Pangkat","Unit Kerja","Bulan","Tahun","Tanggal Isi",
-    ...DIMENSIONS.map(d=>`Rating_${d.id}`),...DIMENSIONS.map(d=>`Bobot_${d.id}`),"Skor","Kategori","Pesan","Butuh Psikolog"];
+    ...DIMENSIONS.map(d=>`Rating_${d.id}`),...DIMENSIONS.map(d=>`Bobot_${d.id}`),"Skor","Kategori","Cerita Beban Kerja","Butuh Psikolog","Masukan Platform"];
   const r = rows.map(r=>[
     r.name,r.nip||"",r.pangkat,r.unit,r.bulan,r.tahun,r.date,
     ...DIMENSIONS.map(d=>r.ratings[d.id]),
     ...DIMENSIONS.map(d=>r.weights[d.id]),
     r.score.toFixed(2), getCategory(r.score).label,
-    `"${(r.pesan||"").replace(/"/g,'""')}"`, r.butuhPsikolog||"-",
+    `"${(r.ceritaBeban||"").replace(/"/g,'""')}"`, r.butuhPsikolog||"-",
+    `"${(r.masukanApp||"").replace(/"/g,'""')}"`,
   ]);
   return [h,...r].map(x=>x.join(",")).join("\n");
 }
@@ -104,8 +105,9 @@ export default function App() {
   const [pairChoices,   setPairChoices]   = useState({});
   const [result,        setResult]        = useState(null);
   const [responses,     setResponses]     = useState([]);
-  const [pesan,         setPesan]         = useState("");
+  const [ceritaBeban,   setCeritaBeban]   = useState("");
   const [butuhPsikolog, setButuhPsikolog] = useState("");
+  const [masukanApp,    setMasukanApp]    = useState("");
   const [loading,       setLoading]       = useState(false);
   const [saving,        setSaving]        = useState(false);
 
@@ -136,7 +138,7 @@ export default function App() {
     setPairs(shuffle(PAIRS)); setPairChoices({});
     setRatings(Object.fromEntries(DIMENSIONS.map(d=>[d.id,50])));
     setName(""); setNip(""); setPangkat(""); setUnit(""); setBulan(""); setTahun("");
-    setPesan(""); setButuhPsikolog("");
+    setCeritaBeban(""); setButuhPsikolog(""); setMasukanApp("");
     setResult(null); setStep(0);
     go(() => setScreen("form"));
   }
@@ -145,18 +147,24 @@ export default function App() {
     const counts = Object.fromEntries(DIMENSIONS.map(d=>[d.id,0]));
     Object.values(pairChoices).forEach(id => { counts[id] = (counts[id]||0)+1; });
     const s = computeScore(ratings, counts);
+    setResult({ score: s, weights: counts });
+    go(() => setStep(3));
+  }
+
+  async function submitRefleksi() {
+    const counts = result.weights;
+    const s = result.score;
     const entry = { name, nip, pangkat, unit, bulan, tahun,
       date: new Date().toLocaleString("id-ID"),
       ratings: { ...ratings }, weights: counts, score: s,
-      pesan, butuhPsikolog };
+      ceritaBeban, butuhPsikolog, masukanApp };
     setSaving(true);
     try {
       await addDoc(collection(db, "responses"), entry);
       await fetchResponses();
     } catch(e) { console.error(e); }
     setSaving(false);
-    setResult({ score: s, weights: counts });
-    go(() => setStep(3));
+    go(() => setStep(5));
   }
 
   const allPairs = pairs.length > 0 && pairs.every((_, i) => pairChoices[i] !== undefined);
@@ -304,9 +312,9 @@ export default function App() {
       <div style={{ width:"100%", maxWidth:540 }}>
         <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:18 }}>
           <button style={S.gBtn} onClick={() => step===0 ? go(()=>setScreen("home")) : go(()=>setStep(step-1))}>← Kembali</button>
-          <span style={{ fontSize:12, color:"#94a3b8" }}>Langkah {step+1} dari 4</span>
+          <span style={{ fontSize:12, color:"#94a3b8" }}>Langkah {step+1} dari 5</span>
         </div>
-        <StepBar cur={step} tot={4}/>
+        <StepBar cur={step} tot={5}/>
 
         <div style={S.card}>
 
@@ -429,8 +437,8 @@ export default function App() {
                 </div>
               ))}
             </div>
-            <button style={{ ...S.pBtn, opacity:allPairs?1:0.45 }} onClick={allPairs&&!saving?finishPairwise:undefined}>
-              {saving ? "⏳ Menyimpan..." : allPairs ? "Hitung Hasil Saya →" : `Tersisa ${pairs.length-Object.keys(pairChoices).length} pasangan`}
+            <button style={{ ...S.pBtn, opacity:allPairs?1:0.45 }} onClick={allPairs?finishPairwise:undefined}>
+              {allPairs ? "Hitung Hasil Saya →" : `Tersisa ${pairs.length-Object.keys(pairChoices).length} pasangan`}
             </button>
           </>}
 
@@ -445,9 +453,9 @@ export default function App() {
                   boxShadow:`0 8px 24px ${cat.color}22` }}>
                   <span style={{ fontSize:28, fontWeight:900, color:cat.color }}>{result.score.toFixed(1)}</span>
                 </div>
-                <h3 style={{ fontSize:21, fontWeight:800, color:"#1e1b4b", margin:"0 0 4px" }}>Pengisian Selesai</h3>
+                <h3 style={{ fontSize:21, fontWeight:800, color:"#1e1b4b", margin:"0 0 4px" }}>Hasil Pengukuran Anda</h3>
                 <p style={{ color:"#64748b", fontSize:13, margin:"0 0 10px" }}>
-                  Terima kasih, <strong>{name}</strong>. Jawaban Anda telah tercatat.
+                  <strong>{name}</strong>, berikut adalah skor beban kerja Anda.
                 </p>
                 <span style={S.tag(cat.color)}>{cat.label}</span>
                 <p style={{ fontSize:11, color:"#94a3b8", marginTop:8, marginBottom:20 }}>Klasifikasi Simanjuntak (2010)</p>
@@ -469,46 +477,129 @@ export default function App() {
                   ))}
                 </div>
 
-                {/* ── 2 kolom tambahan ── */}
-                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:20, textAlign:"left" }}>
-                  {/* Kolom 1 — pesan */}
-                  <div style={{ gridColumn:"1 / 2" }}>
-                    <label style={{ ...S.lbl, marginBottom:6 }}>Ada yang ingin disampaikan?</label>
-                    <textarea
-                      value={pesan} onChange={e=>setPesan(e.target.value)}
-                      placeholder="Ceritakan apa saja: beban kerja, kondisi tim, atau hal lain yang ingin Anda sampaikan..."
-                      rows={4}
-                      style={{ ...S.inp, resize:"vertical", lineHeight:1.6, fontSize:12, padding:"10px 12px" }}
-                      onFocus={e=>e.target.style.borderColor="#4f46e5"}
-                      onBlur={e=>e.target.style.borderColor="#e2e8f0"}
-                    />
-                  </div>
-                  {/* Kolom 2 — psikolog */}
-                  <div>
-                    <label style={{ ...S.lbl, marginBottom:6 }}>Sesi 1-on-1 dengan Psikolog?</label>
-                    <p style={{ fontSize:11, color:"#94a3b8", margin:"0 0 8px", lineHeight:1.5 }}>
-                      Tersedia untuk individu, pasangan, maupun keluarga.
-                    </p>
-                    <SelectWrap value={butuhPsikolog} onChange={e=>setButuhPsikolog(e.target.value)}>
-                      <option value="">-- Pilih --</option>
-                      <option value="Ya">Ya, saya tertarik</option>
-                      <option value="Tidak">Tidak, terima kasih</option>
-                    </SelectWrap>
-                  </div>
-                </div>
-
-                <div style={{ background:"#f0fdf4", border:"1px solid #bbf7d0", borderRadius:14,
-                  padding:"14px 16px", marginBottom:18 }}>
-                  <p style={{ fontSize:13, color:"#15803d", margin:0, lineHeight:1.6 }}>
-                    ✅ Data Anda telah tersimpan. Terima kasih telah meluangkan waktu untuk mengisi kuesioner ini.
-                    Identitas Anda bersifat rahasia.
+                <div style={{ background:"#f8f7ff", border:"1px solid #e0e7ff", borderRadius:14,
+                  padding:"13px 16px", marginBottom:20, textAlign:"left" }}>
+                  <p style={{ fontSize:12, color:"#475569", margin:0, lineHeight:1.6 }}>
+                    💬 Selanjutnya kami ingin mendengar cerita Anda lebih lanjut. Silakan lanjut ke halaman Refleksi Kerja.
                   </p>
                 </div>
 
-                <button style={S.oBtn} onClick={() => go(()=>setScreen("home"))}>Kembali ke Beranda</button>
+                <button style={S.pBtn} onClick={() => go(()=>setStep(4))}>Lanjut ke Refleksi Kerja →</button>
               </div>
             );
           })()}
+
+          {/* STEP 4 — Refleksi Kerja */}
+          {step === 4 && result && (
+            <div>
+              <h3 style={{ fontSize:20, fontWeight:800, color:"#1e1b4b", margin:"0 0 4px" }}>Refleksi Kerja</h3>
+              <p style={{ color:"#64748b", fontSize:13, margin:"0 0 22px", lineHeight:1.6 }}>
+                Bantu kami memahami konteks di balik skor Anda.
+              </p>
+
+              {/* Kolom 1 — cerita beban kerja */}
+              <div style={{ marginBottom:18 }}>
+                <label style={S.lbl}>Apa yang membuat beban kerja Anda terasa seperti ini pada periode ini?</label>
+                <p style={{ fontSize:11, color:"#94a3b8", margin:"0 0 8px", lineHeight:1.5 }}>
+                  Ceritakan situasi, tugas, atau kondisi yang paling berpengaruh terhadap beban kerja Anda.
+                </p>
+                <textarea
+                  value={ceritaBeban} onChange={e=>setCeritaBeban(e.target.value)}
+                  placeholder="Contoh: minggu ini saya menangani 3 proyek sekaligus dengan deadline berdekatan, ditambah banyak rapat mendadak yang memotong waktu kerja..."
+                  rows={5}
+                  style={{ ...S.inp, resize:"vertical", lineHeight:1.6, fontSize:13, padding:"12px 14px" }}
+                  onFocus={e=>e.target.style.borderColor="#4f46e5"}
+                  onBlur={e=>e.target.style.borderColor="#e2e8f0"}
+                />
+              </div>
+
+              {/* Kolom 2 — psikolog */}
+              <div style={{ marginBottom:18 }}>
+                <label style={S.lbl}>Sesi 1-on-1 dengan Psikolog</label>
+                <p style={{ fontSize:11, color:"#94a3b8", margin:"0 0 8px", lineHeight:1.5 }}>
+                  Tersedia untuk individu, pasangan, maupun keluarga.
+                </p>
+                <SelectWrap value={butuhPsikolog} onChange={e=>setButuhPsikolog(e.target.value)}>
+                  <option value="">-- Pilih --</option>
+                  <option value="Ya">Ya, saya tertarik</option>
+                  <option value="Tidak">Tidak, terima kasih</option>
+                  <option value="Belum Tau">Belum Tau</option>
+                </SelectWrap>
+              </div>
+
+              {/* Kolom 3 — masukan platform */}
+              <div style={{ marginBottom:24 }}>
+                <label style={S.lbl}>Evaluasi dan masukan untuk pengukuran ini</label>
+                <p style={{ fontSize:11, color:"#94a3b8", margin:"0 0 8px", lineHeight:1.5 }}>
+                  Ada saran untuk memperbaiki kuesioner atau platform ini? Kami sangat terbuka.
+                </p>
+                <textarea
+                  value={masukanApp} onChange={e=>setMasukanApp(e.target.value)}
+                  placeholder="Contoh: pertanyaannya sudah cukup jelas, tapi mungkin bisa ditambahkan pertanyaan tentang..."
+                  rows={4}
+                  style={{ ...S.inp, resize:"vertical", lineHeight:1.6, fontSize:13, padding:"12px 14px" }}
+                  onFocus={e=>e.target.style.borderColor="#4f46e5"}
+                  onBlur={e=>e.target.style.borderColor="#e2e8f0"}
+                />
+              </div>
+
+              <button
+                style={{ ...S.pBtn, opacity: butuhPsikolog ? 1 : 0.45 }}
+                onClick={butuhPsikolog && !saving ? submitRefleksi : undefined}>
+                {saving ? "⏳ Menyimpan..." : "Kirim & Selesai ✓"}
+              </button>
+              <p style={{ fontSize:11, color:"#94a3b8", textAlign:"center", marginTop:10 }}>
+                Data Anda baru tersimpan setelah tombol ini diklik.
+              </p>
+            </div>
+          )}
+
+          {/* STEP 5 — Konfirmasi */}
+          {step === 5 && (
+            <div style={{ textAlign:"center" }}>
+              <div style={{ width:80, height:80, borderRadius:99, background:"#f0fdf4",
+                border:"2px solid #86efac", margin:"0 auto 20px",
+                display:"flex", alignItems:"center", justifyContent:"center",
+                boxShadow:"0 8px 24px rgba(16,185,129,0.15)", fontSize:36 }}>
+                ✅
+              </div>
+              <h3 style={{ fontSize:22, fontWeight:800, color:"#1e1b4b", margin:"0 0 8px" }}>Data Anda Telah Tersimpan!</h3>
+              <p style={{ color:"#64748b", fontSize:13, margin:"0 0 6px", lineHeight:1.7 }}>
+                Terima kasih, <strong>{name}</strong>. Seluruh jawaban Anda telah berhasil direkam.
+              </p>
+              <p style={{ color:"#94a3b8", fontSize:12, margin:"0 0 24px", lineHeight:1.6 }}>
+                Identitas dan jawaban Anda bersifat <strong>rahasia</strong> dan hanya dapat diakses oleh admin.
+              </p>
+
+              <div style={{ background:"#f8f7ff", border:"1px solid #e0e7ff", borderRadius:14,
+                padding:"16px 18px", marginBottom:22, textAlign:"left" }}>
+                <div style={{ fontSize:11, fontWeight:800, color:"#6366f1", letterSpacing:"0.1em",
+                  textTransform:"uppercase", marginBottom:10 }}>Ringkasan Pengisian</div>
+                <div style={{ display:"flex", flexDirection:"column", gap:7 }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", fontSize:13 }}>
+                    <span style={{ color:"#64748b" }}>Nama</span>
+                    <span style={{ fontWeight:700, color:"#1e1b4b" }}>{name}</span>
+                  </div>
+                  <div style={{ display:"flex", justifyContent:"space-between", fontSize:13 }}>
+                    <span style={{ color:"#64748b" }}>Periode</span>
+                    <span style={{ fontWeight:700, color:"#1e1b4b" }}>{bulan} {tahun}</span>
+                  </div>
+                  <div style={{ display:"flex", justifyContent:"space-between", fontSize:13 }}>
+                    <span style={{ color:"#64748b" }}>Skor NASA-TLX</span>
+                    <span style={{ fontWeight:800, color: result ? getCategory(result.score).color : "#1e1b4b" }}>
+                      {result ? result.score.toFixed(1) : "-"} — {result ? getCategory(result.score).label : "-"}
+                    </span>
+                  </div>
+                  <div style={{ display:"flex", justifyContent:"space-between", fontSize:13 }}>
+                    <span style={{ color:"#64748b" }}>Sesi Psikolog</span>
+                    <span style={{ fontWeight:700, color:"#1e1b4b" }}>{butuhPsikolog || "-"}</span>
+                  </div>
+                </div>
+              </div>
+
+              <button style={S.oBtn} onClick={() => go(()=>setScreen("home"))}>Kembali ke Beranda</button>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -832,7 +923,7 @@ export default function App() {
                     <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
                       <thead>
                         <tr style={{ borderBottom:"2px solid #f1f5f9" }}>
-                          {["Nama","NIP","Pangkat","Unit","Bln/Thn","Skor","Kategori","Psikolog","Pesan"].map(h=>(
+                          {["Nama","NIP","Pangkat","Unit","Bln/Thn","Skor","Kategori","Psikolog","Cerita Beban Kerja","Masukan"].map(h=>(
                             <th key={h} style={{ textAlign:"left", padding:"7px 8px", color:"#94a3b8", fontWeight:700, fontSize:10, textTransform:"uppercase", whiteSpace:"nowrap" }}>{h}</th>
                           ))}
                         </tr>
@@ -851,9 +942,12 @@ export default function App() {
                               <td style={{ padding:"10px 8px" }}>
                                 <span style={{ background:c.color+"18", color:c.color, padding:"3px 9px", borderRadius:99, fontSize:10, fontWeight:700, whiteSpace:"nowrap" }}>{c.label}</span>
                               </td>
-                              <td style={{ padding:"10px 8px", fontSize:11, color: r.butuhPsikolog==="Ya"?"#4f46e5":"#94a3b8", fontWeight: r.butuhPsikolog==="Ya"?700:400 }}>{r.butuhPsikolog||"-"}</td>
+                              <td style={{ padding:"10px 8px", fontSize:11, color: r.butuhPsikolog==="Ya"?"#4f46e5":r.butuhPsikolog==="Belum Tau"?"#f59e0b":"#94a3b8", fontWeight: r.butuhPsikolog==="Ya"?700:400 }}>{r.butuhPsikolog||"-"}</td>
                               <td style={{ padding:"10px 8px", color:"#64748b", fontSize:11, maxWidth:160 }}>
-                                {r.pesan ? <span title={r.pesan}>{r.pesan.length>40?r.pesan.slice(0,40)+"…":r.pesan}</span> : "-"}
+                                {r.ceritaBeban ? <span title={r.ceritaBeban}>{r.ceritaBeban.length>40?r.ceritaBeban.slice(0,40)+"…":r.ceritaBeban}</span> : "-"}
+                              </td>
+                              <td style={{ padding:"10px 8px", color:"#64748b", fontSize:11, maxWidth:120 }}>
+                                {r.masukanApp ? <span title={r.masukanApp}>{r.masukanApp.length>30?r.masukanApp.slice(0,30)+"…":r.masukanApp}</span> : "-"}
                               </td>
                             </tr>
                           );
