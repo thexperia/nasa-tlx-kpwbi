@@ -100,7 +100,7 @@ export default function App() {
   const [unit,          setUnit]          = useState("");
   const [bulan,         setBulan]         = useState("");
   const [tahun,         setTahun]         = useState("");
-  const [ratings,       setRatings]       = useState(Object.fromEntries(DIMENSIONS.map(d=>[d.id,50])));
+  const [ratings,       setRatings]       = useState(Object.fromEntries(DIMENSIONS.map(d=>[d.id,0])));
   const [pairs,         setPairs]         = useState([]);
   const [pairChoices,   setPairChoices]   = useState({});
   const [result,        setResult]        = useState(null);
@@ -136,7 +136,7 @@ export default function App() {
 
   function startForm() {
     setPairs(shuffle(PAIRS)); setPairChoices({});
-    setRatings(Object.fromEntries(DIMENSIONS.map(d=>[d.id,50])));
+    setRatings(Object.fromEntries(DIMENSIONS.map(d=>[d.id,0])));
     setName(""); setNip(""); setPangkat(""); setUnit(""); setBulan(""); setTahun("");
     setCeritaBeban(""); setButuhPsikolog(""); setMasukanApp("");
     setResult(null); setStep(0);
