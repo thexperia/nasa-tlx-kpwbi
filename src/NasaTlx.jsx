@@ -4,12 +4,12 @@ import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc } from "fireb
 
 // 🔥 FIREBASE CONFIG — ganti dengan config milik Anda
 const firebaseConfig = {
-  apiKey: "GANTI_DENGAN_API_KEY_ANDA",
-  authDomain: "GANTI_DENGAN_AUTH_DOMAIN_ANDA",
-  projectId: "GANTI_DENGAN_PROJECT_ID_ANDA",
-  storageBucket: "GANTI_DENGAN_STORAGE_BUCKET_ANDA",
-  messagingSenderId: "GANTI_DENGAN_MESSAGING_SENDER_ID_ANDA",
-  appId: "GANTI_DENGAN_APP_ID_ANDA",
+  apiKey: "AIzaSyBJ8Bpgn1LTCXW8W9Px7JYxiwckeztrUkc",
+  authDomain: "nasa-tlx-diy.firebaseapp.com",
+  projectId: "nasa-tlx-diy",
+  storageBucket: "nasa-tlx-diy.firebasestorage.app",
+  messagingSenderId: "336952540129",
+  appId: "1:336952540129:web:3005cfce9a3b33ebd7f0a0",
 };
 const app = initializeApp(firebaseConfig);
 const db  = getFirestore(app);
@@ -126,16 +126,11 @@ export default function App() {
     try {
       const snap = await getDocs(collection(db, "responses"));
       setResponses(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    } catch(e) {
-      console.error("Fetch error:", e);
-    } finally {
-      setLoading(false);
-    }
+    } catch(e) { console.error(e); }
+    setLoading(false);
   }
 
-  useEffect(() => {
-    if (screen === "dashboard") fetchResponses();
-  }, [screen]);
+  useEffect(() => { fetchResponses(); }, []);
 
   function go(fn) { setFade(false); setTimeout(() => { fn(); setFade(true); }, 180); }
 
@@ -159,25 +154,17 @@ export default function App() {
   async function submitRefleksi() {
     const counts = result.weights;
     const s = result.score;
-    const entry = {
-      name, nip, pangkat, unit, bulan, tahun,
+    const entry = { name, nip, pangkat, unit, bulan, tahun,
       date: new Date().toLocaleString("id-ID"),
       ratings: { ...ratings }, weights: counts, score: s,
-      ceritaBeban: ceritaBeban || "",
-      butuhPsikolog: butuhPsikolog || "",
-      masukanApp: masukanApp || "",
-    };
+      ceritaBeban, butuhPsikolog, masukanApp };
     setSaving(true);
     try {
       await addDoc(collection(db, "responses"), entry);
-      setSaving(false);
-      go(() => setStep(5));
-      fetchResponses(); // refresh data di background, tidak blocking
-    } catch(e) {
-      console.error("Firebase error:", e);
-      setSaving(false);
-      alert("Gagal menyimpan data. Coba lagi atau hubungi admin.");
-    }
+      await fetchResponses();
+    } catch(e) { console.error(e); }
+    setSaving(false);
+    go(() => setStep(5));
   }
 
   const allPairs = pairs.length > 0 && pairs.every((_, i) => pairChoices[i] !== undefined);
