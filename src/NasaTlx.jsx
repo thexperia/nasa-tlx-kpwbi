@@ -126,11 +126,16 @@ export default function App() {
     try {
       const snap = await getDocs(collection(db, "responses"));
       setResponses(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    } catch(e) { console.error(e); }
-    setLoading(false);
+    } catch(e) {
+      console.error("Fetch error:", e);
+    } finally {
+      setLoading(false);
+    }
   }
 
-  useEffect(() => { fetchResponses(); }, []);
+  useEffect(() => {
+    if (screen === "dashboard") fetchResponses();
+  }, [screen]);
 
   function go(fn) { setFade(false); setTimeout(() => { fn(); setFade(true); }, 180); }
 
@@ -154,17 +159,25 @@ export default function App() {
   async function submitRefleksi() {
     const counts = result.weights;
     const s = result.score;
-    const entry = { name, nip, pangkat, unit, bulan, tahun,
+    const entry = {
+      name, nip, pangkat, unit, bulan, tahun,
       date: new Date().toLocaleString("id-ID"),
       ratings: { ...ratings }, weights: counts, score: s,
-      ceritaBeban, butuhPsikolog, masukanApp };
+      ceritaBeban: ceritaBeban || "",
+      butuhPsikolog: butuhPsikolog || "",
+      masukanApp: masukanApp || "",
+    };
     setSaving(true);
     try {
       await addDoc(collection(db, "responses"), entry);
-      await fetchResponses();
-    } catch(e) { console.error(e); }
-    setSaving(false);
-    go(() => setStep(5));
+      setSaving(false);
+      go(() => setStep(5));
+      fetchResponses(); // refresh data di background, tidak blocking
+    } catch(e) {
+      console.error("Firebase error:", e);
+      setSaving(false);
+      alert("Gagal menyimpan data. Coba lagi atau hubungi admin.");
+    }
   }
 
   const allPairs = pairs.length > 0 && pairs.every((_, i) => pairChoices[i] !== undefined);
