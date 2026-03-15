@@ -119,6 +119,8 @@ export default function App() {
   const [filterBulan,   setFilterBulan]   = useState([NOW_MONTH]);
   const [filterTahun,   setFilterTahun]   = useState(NOW_YEAR);
   const [filterKat,     setFilterKat]     = useState("Semua");
+  const [filterUnit,    setFilterUnit]    = useState("Semua");
+  const [filterPangkat, setFilterPangkat] = useState("Semua");
   const [fade,          setFade]          = useState(true);
 
   async function fetchResponses() {
@@ -177,10 +179,12 @@ export default function App() {
   const KATEGORI_OPTIONS = ["Semua","Rendah","Sedang","Agak Tinggi","Tinggi","Tinggi Sekali"];
 
   const filtered = responses.filter(r => {
-    const matchBulan = filterBulan.length === 0 || filterBulan.includes(r.bulan);
-    const matchTahun = !filterTahun || filterTahun === "Semua" || String(r.tahun) === String(filterTahun);
-    const matchKat   = filterKat === "Semua" || getCategory(r.score).label === filterKat;
-    return matchBulan && matchTahun && matchKat;
+    const matchBulan   = filterBulan.length === 0 || filterBulan.includes(r.bulan);
+    const matchTahun   = !filterTahun || filterTahun === "Semua" || String(r.tahun) === String(filterTahun);
+    const matchKat     = filterKat === "Semua" || getCategory(r.score).label === filterKat;
+    const matchUnit    = filterUnit === "Semua" || r.unit === filterUnit;
+    const matchPangkat = filterPangkat === "Semua" || r.pangkat === filterPangkat;
+    return matchBulan && matchTahun && matchKat && matchUnit && matchPangkat;
   });
 
   function toggleBulan(m) {
@@ -696,9 +700,33 @@ export default function App() {
                   {KATEGORI_OPTIONS.map(k=><option key={k} value={k}>{k}</option>)}
                 </SelectWrap>
               </div>
-              <button onClick={()=>{ setFilterBulan([NOW_MONTH]); setFilterTahun(NOW_YEAR); setFilterKat("Semua"); }}
+              <button onClick={()=>{ setFilterBulan([NOW_MONTH]); setFilterTahun(NOW_YEAR); setFilterKat("Semua"); setFilterUnit("Semua"); setFilterPangkat("Semua"); }}
                 style={{ ...S.gBtn, padding:"10px 16px", borderRadius:12, fontSize:12, marginBottom:1 }}>Reset</button>
             </div>
+
+            {/* Filter tambahan — hanya admin */}
+            {adminUnlocked && (
+              <div style={{ marginTop:14, paddingTop:14, borderTop:"1px dashed #e0e7ff" }}>
+                <div style={{ fontSize:10, fontWeight:700, color:"#818cf8", textTransform:"uppercase",
+                  letterSpacing:"0.08em", marginBottom:10 }}>🔒 Filter Admin</div>
+                <div style={{ display:"flex", flexWrap:"wrap", gap:12, alignItems:"flex-end" }}>
+                  <div style={{ flex:"1 1 160px" }}>
+                    <label style={{ ...S.lbl, marginBottom:5 }}>Unit Kerja</label>
+                    <SelectWrap value={filterUnit} onChange={e=>setFilterUnit(e.target.value)}>
+                      <option value="Semua">Semua Unit</option>
+                      {UNIT_LIST.map(u=><option key={u} value={u}>{u}</option>)}
+                    </SelectWrap>
+                  </div>
+                  <div style={{ flex:"1 1 160px" }}>
+                    <label style={{ ...S.lbl, marginBottom:5 }}>Pangkat</label>
+                    <SelectWrap value={filterPangkat} onChange={e=>setFilterPangkat(e.target.value)}>
+                      <option value="Semua">Semua Pangkat</option>
+                      {PANGKAT_LIST.map(p=><option key={p} value={p}>{p}</option>)}
+                    </SelectWrap>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           <div style={{ fontSize:13, color:"#4f46e5", fontWeight:700, marginBottom:14, paddingLeft:2 }}>
@@ -734,78 +762,115 @@ export default function App() {
                 ))}
               </div>
 
-              {/* ── LINE CHART — Tren Perkembangan ── */}
+              {/* ── STACKED BAR CHART — Distribusi per Bulan ── */}
               {(() => {
-                const sorted = [...filtered].sort((a,b) => new Date(a.date) - new Date(b.date));
-                if (sorted.length < 2) return null;
-                const W = 620, H = 180, padL = 40, padR = 16, padT = 16, padB = 36;
-                const scores = sorted.map(r => r.score);
-                const minS = Math.max(0, Math.min(...scores) - 5);
-                const maxS = Math.min(100, Math.max(...scores) + 5);
-                const xStep = (W - padL - padR) / (sorted.length - 1);
-                const yScale = (s) => padT + (H - padT - padB) * (1 - (s - minS) / (maxS - minS));
-                const pts = sorted.map((r,i) => ({ x: padL + i * xStep, y: yScale(r.score), r }));
-                const polyline = pts.map(p => `${p.x},${p.y}`).join(" ");
-                const area = `M${pts[0].x},${pts[0].y} ` + pts.slice(1).map(p=>`L${p.x},${p.y}`).join(" ") + ` L${pts[pts.length-1].x},${H-padB} L${pts[0].x},${H-padB} Z`;
-                const yTicks = [minS, (minS+maxS)/2, maxS].map(v => Math.round(v));
+                const CAT_LABELS = ["Rendah","Sedang","Agak Tinggi","Tinggi","Tinggi Sekali"];
+                const CAT_COLORS = ["#22c55e","#3b82f6","#f59e0b","#f97316","#ef4444"];
+                // Kumpulkan bulan unik dari filtered, urutkan sesuai MONTHS
+                const bulanList = MONTHS.filter(m => filtered.some(r => r.bulan === m));
+                if (bulanList.length === 0) return null;
+                const W = 620, H = 220, padL = 36, padR = 50, padT = 16, padB = 32;
+                const innerW = W - padL - padR;
+                const innerH = H - padT - padB;
+                const barW = Math.min(60, innerW / bulanList.length * 0.55);
+                const barGap = innerW / bulanList.length;
+
+                // Hitung jumlah per kategori per bulan
+                const stackByBulan = bulanList.map(m => {
+                  const rows = filtered.filter(r => r.bulan === m);
+                  const counts = CAT_LABELS.map(lb => rows.filter(r => getCategory(r.score).label === lb).length);
+                  const avg = rows.length ? rows.reduce((s,r)=>s+r.score,0)/rows.length : 0;
+                  return { m, counts, total: rows.length, avg };
+                });
+
+                const maxTotal = Math.max(...stackByBulan.map(d => d.total), 1);
+                const yTicks = [0, Math.ceil(maxTotal/2), maxTotal];
+
+                // Scale helpers
+                const xPos = (i) => padL + i * barGap + barGap/2;
+                const yPos = (v) => padT + innerH * (1 - v / maxTotal);
+                const avgYPos = (avg) => padT + innerH * (1 - avg / 100);
+
                 return (
                   <div style={{ background:"#fff", borderRadius:18, padding:"20px 22px", boxShadow:"0 1px 8px rgba(79,70,229,0.07)", marginBottom:14 }}>
-                    <h4 style={{ fontWeight:800, fontSize:15, color:"#1e1b4b", margin:"0 0 4px" }}>Tren Perkembangan Beban Kerja</h4>
-                    <p style={{ fontSize:11, color:"#94a3b8", margin:"0 0 14px" }}>Berdasarkan urutan waktu pengisian — {sorted.length} pengukuran</p>
+                    <h4 style={{ fontWeight:800, fontSize:15, color:"#1e1b4b", margin:"0 0 4px" }}>Distribusi Beban Kerja per Bulan</h4>
+                    <p style={{ fontSize:11, color:"#94a3b8", margin:"0 0 14px" }}>Jumlah pegawai per kategori · titik = rata-rata skor · garis = tren rata-rata</p>
                     <div style={{ overflowX:"auto" }}>
                       <svg width={W} height={H} style={{ display:"block", minWidth:320 }}>
                         <defs>
-                          <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#4f46e5" stopOpacity="0.18"/>
-                            <stop offset="100%" stopColor="#4f46e5" stopOpacity="0.01"/>
-                          </linearGradient>
+                          <marker id="arrowR" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
+                            <path d="M0,0 L6,3 L0,6 Z" fill="#4f46e5"/>
+                          </marker>
                         </defs>
-                        {/* Y grid lines */}
+                        {/* Y grid + ticks */}
                         {yTicks.map((t,i) => (
                           <g key={i}>
-                            <line x1={padL} y1={yScale(t)} x2={W-padR} y2={yScale(t)} stroke="#f1f5f9" strokeWidth="1"/>
-                            <text x={padL-6} y={yScale(t)+4} fontSize="9" fill="#94a3b8" textAnchor="end">{Math.round(t)}</text>
+                            <line x1={padL} y1={yPos(t)} x2={W-padR} y2={yPos(t)} stroke="#f1f5f9" strokeWidth="1"/>
+                            <text x={padL-4} y={yPos(t)+4} fontSize="9" fill="#94a3b8" textAnchor="end">{t}</text>
                           </g>
                         ))}
-                        {/* Area fill */}
-                        <path d={area} fill="url(#areaGrad)"/>
-                        {/* Line */}
-                        <polyline points={polyline} fill="none" stroke="#4f46e5" strokeWidth="2.2" strokeLinejoin="round" strokeLinecap="round"/>
-                        {/* Dots */}
-                        {pts.map((p,i) => {
-                          const c = getCategory(p.r.score);
+                        {/* Right axis label (skor) */}
+                        {[0,25,50,75,100].map((s,i) => (
+                          <text key={i} x={W-padR+4} y={avgYPos(s)+4} fontSize="8" fill="#4f46e5" opacity="0.7">{s}</text>
+                        ))}
+                        <text x={W-padR+4} y={padT-4} fontSize="8" fill="#4f46e5" textAnchor="start">skor</text>
+
+                        {/* Stacked bars */}
+                        {stackByBulan.map((d, bi) => {
+                          let stackY = yPos(0);
                           return (
-                            <g key={i}>
-                              <circle cx={p.x} cy={p.y} r="5" fill="#fff" stroke={c.color} strokeWidth="2"/>
-                              <circle cx={p.x} cy={p.y} r="2.5" fill={c.color}/>
+                            <g key={bi}>
+                              {d.counts.map((cnt, ci) => {
+                                if (cnt === 0) return null;
+                                const barH = innerH * cnt / maxTotal;
+                                stackY -= barH;
+                                return (
+                                  <rect key={ci}
+                                    x={xPos(bi) - barW/2} y={stackY}
+                                    width={barW} height={barH}
+                                    fill={CAT_COLORS[ci]} opacity="0.85" rx="2"/>
+                                );
+                              })}
+                              {/* Total label on top */}
+                              <text x={xPos(bi)} y={yPos(d.total)-4} fontSize="9" fill="#475569" textAnchor="middle" fontWeight="700">{d.total}</text>
+                              {/* X label */}
+                              <text x={xPos(bi)} y={H-padB+14} fontSize="10" fill="#64748b" textAnchor="middle">{d.m.slice(0,3)}</text>
                             </g>
                           );
                         })}
-                        {/* X labels — show max 8 evenly */}
-                        {pts.filter((_,i) => sorted.length <= 8 || i % Math.ceil(sorted.length/8) === 0 || i === sorted.length-1).map((p,i) => (
-                          <text key={i} x={p.x} y={H-padB+14} fontSize="8" fill="#94a3b8" textAnchor="middle">
-                            {p.r.bulan ? p.r.bulan.slice(0,3) : ""} {String(p.r.tahun).slice(2)}
-                          </text>
+
+                        {/* Avg line */}
+                        {bulanList.length > 1 && stackByBulan.map((d, bi) => {
+                          if (bi === 0) return null;
+                          const prev = stackByBulan[bi-1];
+                          return (
+                            <line key={bi}
+                              x1={xPos(bi-1)} y1={avgYPos(prev.avg)}
+                              x2={xPos(bi)}   y2={avgYPos(d.avg)}
+                              stroke="#4f46e5" strokeWidth="2" strokeLinejoin="round"/>
+                          );
+                        })}
+                        {/* Avg dots */}
+                        {stackByBulan.map((d, bi) => (
+                          <g key={bi}>
+                            <circle cx={xPos(bi)} cy={avgYPos(d.avg)} r="5.5" fill="#fff" stroke="#4f46e5" strokeWidth="2"/>
+                            <circle cx={xPos(bi)} cy={avgYPos(d.avg)} r="2.5" fill="#4f46e5"/>
+                            <text x={xPos(bi)} y={avgYPos(d.avg)-9} fontSize="9" fill="#4f46e5" textAnchor="middle" fontWeight="700">{Math.round(d.avg)}</text>
+                          </g>
                         ))}
-                        {/* Avg reference line */}
-                        <line x1={padL} y1={yScale(avg)} x2={W-padR} y2={yScale(avg)} stroke="#f59e0b" strokeWidth="1.2" strokeDasharray="4,3"/>
-                        <text x={W-padR-2} y={yScale(avg)-4} fontSize="8" fill="#f59e0b" textAnchor="end">rata-rata</text>
                       </svg>
                     </div>
-                    {/* Legend dots */}
-                    <div style={{ display:"flex", gap:14, marginTop:10, flexWrap:"wrap" }}>
-                      {["Rendah","Sedang","Agak Tinggi","Tinggi","Tinggi Sekali"].map(lb => {
-                        const c = getCategory(lb==="Rendah"?0:lb==="Sedang"?15:lb==="Agak Tinggi"?35:lb==="Tinggi"?60:85);
-                        return (
-                          <div key={lb} style={{ display:"flex", alignItems:"center", gap:5 }}>
-                            <div style={{ width:8, height:8, borderRadius:99, background:c.color }}/>
-                            <span style={{ fontSize:10, color:"#64748b" }}>{lb}</span>
-                          </div>
-                        );
-                      })}
+                    {/* Legend */}
+                    <div style={{ display:"flex", gap:12, marginTop:10, flexWrap:"wrap" }}>
+                      {CAT_LABELS.map((lb,i) => (
+                        <div key={lb} style={{ display:"flex", alignItems:"center", gap:5 }}>
+                          <div style={{ width:9, height:9, borderRadius:2, background:CAT_COLORS[i] }}/>
+                          <span style={{ fontSize:10, color:"#64748b" }}>{lb}</span>
+                        </div>
+                      ))}
                       <div style={{ display:"flex", alignItems:"center", gap:5 }}>
-                        <div style={{ width:14, height:1.5, background:"#f59e0b", borderRadius:99 }}/>
-                        <span style={{ fontSize:10, color:"#64748b" }}>Rata-rata</span>
+                        <div style={{ width:8, height:8, borderRadius:99, background:"#fff", border:"2px solid #4f46e5" }}/>
+                        <span style={{ fontSize:10, color:"#64748b" }}>Rata-rata skor</span>
                       </div>
                     </div>
                   </div>
@@ -923,7 +988,7 @@ export default function App() {
                     <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
                       <thead>
                         <tr style={{ borderBottom:"2px solid #f1f5f9" }}>
-                          {["Nama","NIP","Pangkat","Unit","Bln/Thn","Skor","Kategori","Psikolog","Cerita Beban Kerja","Masukan"].map(h=>(
+                          {["Nama","NIP","Pangkat","Unit","Bln/Thn","Skor","Kategori","Psikolog","Cerita Beban Kerja","Masukan",""].map(h=>(
                             <th key={h} style={{ textAlign:"left", padding:"7px 8px", color:"#94a3b8", fontWeight:700, fontSize:10, textTransform:"uppercase", whiteSpace:"nowrap" }}>{h}</th>
                           ))}
                         </tr>
@@ -948,6 +1013,22 @@ export default function App() {
                               </td>
                               <td style={{ padding:"10px 8px", color:"#64748b", fontSize:11, maxWidth:120 }}>
                                 {r.masukanApp ? <span title={r.masukanApp}>{r.masukanApp.length>30?r.masukanApp.slice(0,30)+"…":r.masukanApp}</span> : "-"}
+                              </td>
+                              <td style={{ padding:"10px 8px" }}>
+                                <button
+                                  onClick={async()=>{
+                                    if(window.confirm(`Hapus data milik ${r.name}?`)){
+                                      try{
+                                        await deleteDoc(doc(db,"responses",r.id));
+                                        setResponses(prev=>prev.filter(x=>x.id!==r.id));
+                                      }catch(e){console.error(e);}
+                                    }
+                                  }}
+                                  style={{ background:"#fee2e2", color:"#ef4444", border:"none",
+                                    borderRadius:7, padding:"4px 9px", fontSize:11, fontWeight:700,
+                                    cursor:"pointer", fontFamily:"inherit", whiteSpace:"nowrap" }}>
+                                  ✕ Hapus
+                                </button>
                               </td>
                             </tr>
                           );
