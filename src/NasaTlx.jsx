@@ -766,7 +766,6 @@ export default function App() {
               {(() => {
                 const CAT_LABELS = ["Rendah","Sedang","Agak Tinggi","Tinggi","Tinggi Sekali"];
                 const CAT_COLORS = ["#22c55e","#3b82f6","#f59e0b","#f97316","#ef4444"];
-                // Kumpulkan bulan unik dari filtered, urutkan sesuai MONTHS
                 const bulanList = MONTHS.filter(m => filtered.some(r => r.bulan === m));
                 if (bulanList.length === 0) return null;
                 const W = 620, H = 220, padL = 36, padR = 50, padT = 16, padB = 32;
@@ -775,33 +774,27 @@ export default function App() {
                 const barW = Math.min(60, innerW / bulanList.length * 0.55);
                 const barGap = innerW / bulanList.length;
 
-                // Hitung jumlah per kategori per bulan
                 const stackByBulan = bulanList.map(m => {
                   const rows = filtered.filter(r => r.bulan === m);
                   const counts = CAT_LABELS.map(lb => rows.filter(r => getCategory(r.score).label === lb).length);
-                  const avg = rows.length ? rows.reduce((s,r)=>s+r.score,0)/rows.length : 0;
-                  return { m, counts, total: rows.length, avg };
+                  const avgM = rows.length ? rows.reduce((s,r)=>s+r.score,0)/rows.length : 0;
+                  const maxS = rows.length ? Math.max(...rows.map(r=>r.score)) : 0;
+                  const minS = rows.length ? Math.min(...rows.map(r=>r.score)) : 0;
+                  return { m, counts, total: rows.length, avg: avgM, max: maxS, min: minS };
                 });
 
                 const maxTotal = Math.max(...stackByBulan.map(d => d.total), 1);
                 const yTicks = [0, Math.ceil(maxTotal/2), maxTotal];
-
-                // Scale helpers
                 const xPos = (i) => padL + i * barGap + barGap/2;
                 const yPos = (v) => padT + innerH * (1 - v / maxTotal);
-                const avgYPos = (avg) => padT + innerH * (1 - avg / 100);
+                const avgYPos = (a) => padT + innerH * (1 - a / 100);
 
                 return (
                   <div style={{ background:"#fff", borderRadius:18, padding:"20px 22px", boxShadow:"0 1px 8px rgba(79,70,229,0.07)", marginBottom:14 }}>
                     <h4 style={{ fontWeight:800, fontSize:15, color:"#1e1b4b", margin:"0 0 4px" }}>Distribusi Beban Kerja per Bulan</h4>
-                    <p style={{ fontSize:11, color:"#94a3b8", margin:"0 0 14px" }}>Jumlah pegawai per kategori · titik = rata-rata skor · garis = tren rata-rata</p>
-                    <div style={{ overflowX:"auto" }}>
+                    <p style={{ fontSize:11, color:"#94a3b8", margin:"0 0 14px" }}>Hover batang untuk detail · titik = rata-rata skor · garis = tren rata-rata</p>
+                    <div style={{ overflowX:"auto", position:"relative" }}>
                       <svg width={W} height={H} style={{ display:"block", minWidth:320 }}>
-                        <defs>
-                          <marker id="arrowR" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
-                            <path d="M0,0 L6,3 L0,6 Z" fill="#4f46e5"/>
-                          </marker>
-                        </defs>
                         {/* Y grid + ticks */}
                         {yTicks.map((t,i) => (
                           <g key={i}>
@@ -809,15 +802,23 @@ export default function App() {
                             <text x={padL-4} y={yPos(t)+4} fontSize="9" fill="#94a3b8" textAnchor="end">{t}</text>
                           </g>
                         ))}
-                        {/* Right axis label (skor) */}
+                        {/* Right axis label */}
                         {[0,25,50,75,100].map((s,i) => (
                           <text key={i} x={W-padR+4} y={avgYPos(s)+4} fontSize="8" fill="#4f46e5" opacity="0.7">{s}</text>
                         ))}
                         <text x={W-padR+4} y={padT-4} fontSize="8" fill="#4f46e5" textAnchor="start">skor</text>
 
-                        {/* Stacked bars */}
+                        {/* Stacked bars + invisible hover zone */}
                         {stackByBulan.map((d, bi) => {
                           let stackY = yPos(0);
+                          const tooltipLines = [
+                            `📅 ${d.m}`,
+                            `👥 Total: ${d.total} orang`,
+                            `📊 Rata-rata: ${d.avg.toFixed(1)}`,
+                            `🔺 Tertinggi: ${d.max.toFixed(1)}`,
+                            `🔻 Terendah: ${d.min.toFixed(1)}`,
+                            ...CAT_LABELS.map((lb,ci) => d.counts[ci]>0 ? `  ${lb}: ${d.counts[ci]}` : null).filter(Boolean),
+                          ];
                           return (
                             <g key={bi}>
                               {d.counts.map((cnt, ci) => {
@@ -835,6 +836,13 @@ export default function App() {
                               <text x={xPos(bi)} y={yPos(d.total)-4} fontSize="9" fill="#475569" textAnchor="middle" fontWeight="700">{d.total}</text>
                               {/* X label */}
                               <text x={xPos(bi)} y={H-padB+14} fontSize="10" fill="#64748b" textAnchor="middle">{d.m.slice(0,3)}</text>
+                              {/* Invisible hover zone over full bar column */}
+                              <rect
+                                x={xPos(bi) - barW/2 - 6} y={padT}
+                                width={barW + 12} height={innerH}
+                                fill="transparent" style={{ cursor:"pointer" }}>
+                                <title>{tooltipLines.join("\n")}</title>
+                              </rect>
                             </g>
                           );
                         })}
