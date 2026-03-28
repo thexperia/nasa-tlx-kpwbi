@@ -32,7 +32,7 @@ const DIMENSIONS = [
 ];
 
 const PANGKAT_LIST = ["Direktur Eksekutif","Direktur","Deputi Direktur","Asisten Direktur","Manajer","Asisten Manajer","Staf","Pelaksana"];
-const UNIT_LIST    = ["Kepala Perwakilan","Deputi Kepala Perwakilan","TPKP","FDSEK","FPPUKIS","Unit Kehumasan","PUR","FIKSP","FIPSP","Logistik dan Pengamanan","SDM","Unit Keuangan"];
+const UNIT_LIST    = ["Kepala Perwakilan","Deputi Kepala Perwakilan","TPKP","FDSEK","FPPUKIS","Unit Kehumasan","PUR","FIKSP","FIPSP","Logistik dan Pengamanan","SDM","Unit Keuangan","TIK","TMI","TIKSPUR"];
 
 const PAIRS = (() => {
   const p = [];
