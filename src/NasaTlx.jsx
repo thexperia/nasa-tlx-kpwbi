@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { initializeApp } from "firebase/app";
-import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc } from "firebase/firestore";
+import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, updateDoc } from "firebase/firestore";
 
 // 🔥 FIREBASE CONFIG — ganti dengan config milik Anda
 const firebaseConfig = {
@@ -15,11 +15,11 @@ const app = initializeApp(firebaseConfig);
 const db  = getFirestore(app);
 
 function getCategory(s) {
-  if (s <= 9)  return { label: "Rendah",       color: "#22c55e" };
-  if (s <= 29) return { label: "Sedang",        color: "#3b82f6" };
-  if (s <= 49) return { label: "Agak Tinggi",   color: "#f59e0b" };
-  if (s <= 79) return { label: "Tinggi",        color: "#f97316" };
-  return           { label: "Tinggi Sekali",  color: "#ef4444" };
+  if (s <= 20) return { label: "Sangat Rendah", color: "#22c55e" };
+  if (s <= 40) return { label: "Rendah",        color: "#3b82f6" };
+  if (s <= 60) return { label: "Sedang",        color: "#f59e0b" };
+  if (s <= 80) return { label: "Tinggi",        color: "#f97316" };
+  return           { label: "Sangat Tinggi",  color: "#ef4444" };
 }
 
 const DIMENSIONS = [
@@ -121,6 +121,7 @@ export default function App() {
   const [filterKat,     setFilterKat]     = useState("Semua");
   const [filterUnit,    setFilterUnit]    = useState("Semua");
   const [filterPangkat, setFilterPangkat] = useState("Semua");
+  const [editRow,       setEditRow]       = useState(null);
   const [fade,          setFade]          = useState(true);
 
   async function fetchResponses() {
@@ -171,12 +172,25 @@ export default function App() {
 
   const allPairs = pairs.length > 0 && pairs.every((_, i) => pairChoices[i] !== undefined);
 
+  async function saveEdit(edited) {
+    const newScore = computeScore(edited.ratings, edited.weights);
+    const updated = { ...edited, score: newScore };
+    setSaving(true);
+    try {
+      const { id, ...data } = updated;
+      await updateDoc(doc(db, "responses", id), { ...data, score: newScore });
+      setResponses(prev => prev.map(r => r.id === id ? updated : r));
+    } catch(e) { console.error(e); }
+    setSaving(false);
+    setEditRow(null);
+  }
+
   function tryAdmin() {
     if (adminPw === "bismillah#21") { setAdminUnlocked(true); setAdminError(false); setShowAdminBox(false); fetchResponses(); }
     else { setAdminError(true); }
   }
 
-  const KATEGORI_OPTIONS = ["Semua","Rendah","Sedang","Agak Tinggi","Tinggi","Tinggi Sekali"];
+  const KATEGORI_OPTIONS = ["Semua","Sangat Rendah","Rendah","Sedang","Tinggi","Sangat Tinggi"];
 
   const filtered = responses.filter(r => {
     const matchBulan   = filterBulan.length === 0 || filterBulan.includes(r.bulan);
@@ -618,9 +632,9 @@ export default function App() {
     const dimAvg = DIMENSIONS.map(d => ({
       ...d, avg: filtered.length ? filtered.reduce((s,r)=>s+(r.ratings[d.id]||0),0)/filtered.length : 0,
     })).sort((a,b)=>b.avg-a.avg);
-    const distData = ["Rendah","Sedang","Agak Tinggi","Tinggi","Tinggi Sekali"].map(lb => ({
+    const distData = ["Sangat Rendah","Rendah","Sedang","Tinggi","Sangat Tinggi"].map(lb => ({
       label: lb,
-      color: getCategory(lb==="Rendah"?0:lb==="Sedang"?15:lb==="Agak Tinggi"?35:lb==="Tinggi"?60:85).color,
+      color: getCategory(lb==="Sangat Rendah"?0:lb==="Rendah"?25:lb==="Sedang"?50:lb==="Tinggi"?70:90).color,
       count: filtered.filter(r=>getCategory(r.score).label===lb).length,
     }));
     const availYears = ["Semua", ...YEARS.filter(y=>responses.some(r=>String(r.tahun)===String(y)))];
@@ -628,6 +642,158 @@ export default function App() {
     return (
       <div style={S.page}>
         <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+
+        {/* ── EDIT MODAL ── */}
+        {editRow && (
+          <div style={{ position:"fixed", inset:0, background:"rgba(15,15,40,0.55)", zIndex:100,
+            display:"flex", alignItems:"center", justifyContent:"center", padding:"16px" }}>
+            <div style={{ background:"#fff", borderRadius:20, padding:"24px 24px", width:"100%", maxWidth:560,
+              maxHeight:"90vh", overflowY:"auto", boxShadow:"0 8px 40px rgba(0,0,0,0.2)" }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:18 }}>
+                <div>
+                  <div style={{ fontWeight:800, fontSize:16, color:"#1e1b4b" }}>Edit Data — {editRow.name}</div>
+                  <div style={{ fontSize:11, color:"#94a3b8", marginTop:2 }}>Skor dihitung ulang otomatis setelah simpan</div>
+                </div>
+                <button onClick={()=>setEditRow(null)}
+                  style={{ background:"#f1f5f9", border:"none", borderRadius:99, width:32, height:32,
+                    fontSize:16, cursor:"pointer", fontFamily:"inherit", color:"#64748b" }}>✕</button>
+              </div>
+
+              {/* Biodata */}
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:14 }}>
+                {[
+                  { lbl:"Nama", key:"name", full:true },
+                  { lbl:"NIP",  key:"nip" },
+                ].map(f => (
+                  <div key={f.key} style={{ gridColumn: f.full?"1/-1":"auto" }}>
+                    <label style={S.lbl}>{f.lbl}</label>
+                    <input style={S.inp} value={editRow[f.key]||""}
+                      onChange={e=>setEditRow(r=>({...r,[f.key]:e.target.value}))}
+                      onFocus={e=>e.target.style.borderColor="#4f46e5"}
+                      onBlur={e=>e.target.style.borderColor="#e2e8f0"}/>
+                  </div>
+                ))}
+                <div>
+                  <label style={S.lbl}>Pangkat</label>
+                  <SelectWrap value={editRow.pangkat||""} onChange={e=>setEditRow(r=>({...r,pangkat:e.target.value}))}>
+                    <option value="">-- Pilih --</option>
+                    {PANGKAT_LIST.map(p=><option key={p} value={p}>{p}</option>)}
+                  </SelectWrap>
+                </div>
+                <div>
+                  <label style={S.lbl}>Unit Kerja</label>
+                  <SelectWrap value={editRow.unit||""} onChange={e=>setEditRow(r=>({...r,unit:e.target.value}))}>
+                    <option value="">-- Pilih --</option>
+                    {UNIT_LIST.map(u=><option key={u} value={u}>{u}</option>)}
+                  </SelectWrap>
+                </div>
+                <div>
+                  <label style={S.lbl}>Bulan</label>
+                  <SelectWrap value={editRow.bulan||""} onChange={e=>setEditRow(r=>({...r,bulan:e.target.value}))}>
+                    <option value="">-- Pilih --</option>
+                    {MONTHS.map(m=><option key={m} value={m}>{m}</option>)}
+                  </SelectWrap>
+                </div>
+                <div>
+                  <label style={S.lbl}>Tahun</label>
+                  <SelectWrap value={editRow.tahun||""} onChange={e=>setEditRow(r=>({...r,tahun:e.target.value}))}>
+                    <option value="">-- Pilih --</option>
+                    {YEARS.map(y=><option key={y} value={y}>{y}</option>)}
+                  </SelectWrap>
+                </div>
+              </div>
+
+              {/* Ratings */}
+              <div style={{ fontSize:11, fontWeight:700, color:"#6366f1", textTransform:"uppercase",
+                letterSpacing:"0.08em", marginBottom:10 }}>Rating Dimensi (0–100)</div>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:14 }}>
+                {DIMENSIONS.map(d => (
+                  <div key={d.id} style={{ background:"#f8f7ff", borderRadius:12, padding:"10px 12px" }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
+                      <span style={{ fontSize:11, fontWeight:700, color:"#475569" }}>{d.label}</span>
+                      <span style={{ fontSize:13, fontWeight:800, color:"#4f46e5" }}>{editRow.ratings?.[d.id]??0}</span>
+                    </div>
+                    <input type="range" min={0} max={100} step={5}
+                      value={editRow.ratings?.[d.id]??0}
+                      onChange={e=>setEditRow(r=>({...r, ratings:{...r.ratings,[d.id]:+e.target.value}}))}
+                      style={{ width:"100%", accentColor:"#4f46e5", cursor:"pointer" }}/>
+                  </div>
+                ))}
+              </div>
+
+              {/* Weights */}
+              <div style={{ fontSize:11, fontWeight:700, color:"#6366f1", textTransform:"uppercase",
+                letterSpacing:"0.08em", marginBottom:10 }}>Bobot Pairwise (0–5)</div>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:14 }}>
+                {DIMENSIONS.map(d => (
+                  <div key={d.id} style={{ background:"#f8f7ff", borderRadius:12, padding:"10px 12px" }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
+                      <span style={{ fontSize:11, fontWeight:700, color:"#475569" }}>{d.label}</span>
+                      <span style={{ fontSize:13, fontWeight:800, color:"#4f46e5" }}>{editRow.weights?.[d.id]??0}</span>
+                    </div>
+                    <input type="range" min={0} max={5} step={1}
+                      value={editRow.weights?.[d.id]??0}
+                      onChange={e=>setEditRow(r=>({...r, weights:{...r.weights,[d.id]:+e.target.value}}))}
+                      style={{ width:"100%", accentColor:"#6366f1", cursor:"pointer" }}/>
+                  </div>
+                ))}
+              </div>
+
+              {/* Skor preview */}
+              {(() => {
+                const previewScore = computeScore(editRow.ratings||{}, editRow.weights||{});
+                const previewCat = getCategory(previewScore);
+                return (
+                  <div style={{ background:"#f0f4ff", borderRadius:12, padding:"12px 14px", marginBottom:14,
+                    display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+                    <span style={{ fontSize:12, color:"#475569", fontWeight:600 }}>Preview skor baru:</span>
+                    <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                      <span style={{ fontSize:20, fontWeight:900, color:previewCat.color }}>{previewScore.toFixed(1)}</span>
+                      <span style={{ background:previewCat.color+"18", color:previewCat.color,
+                        padding:"2px 10px", borderRadius:99, fontSize:11, fontWeight:700 }}>{previewCat.label}</span>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Refleksi fields */}
+              <div style={{ marginBottom:12 }}>
+                <label style={S.lbl}>Cerita Beban Kerja</label>
+                <textarea rows={3} style={{ ...S.inp, resize:"vertical", fontSize:12, lineHeight:1.6 }}
+                  value={editRow.ceritaBeban||""}
+                  onChange={e=>setEditRow(r=>({...r,ceritaBeban:e.target.value}))}
+                  onFocus={e=>e.target.style.borderColor="#4f46e5"}
+                  onBlur={e=>e.target.style.borderColor="#e2e8f0"}/>
+              </div>
+              <div style={{ marginBottom:12 }}>
+                <label style={S.lbl}>Sesi Psikolog</label>
+                <SelectWrap value={editRow.butuhPsikolog||""} onChange={e=>setEditRow(r=>({...r,butuhPsikolog:e.target.value}))}>
+                  <option value="">-- Pilih --</option>
+                  <option value="Ya">Ya, saya tertarik</option>
+                  <option value="Tidak">Tidak, terima kasih</option>
+                  <option value="Belum Tau">Belum Tau</option>
+                </SelectWrap>
+              </div>
+              <div style={{ marginBottom:20 }}>
+                <label style={S.lbl}>Masukan Platform</label>
+                <textarea rows={3} style={{ ...S.inp, resize:"vertical", fontSize:12, lineHeight:1.6 }}
+                  value={editRow.masukanApp||""}
+                  onChange={e=>setEditRow(r=>({...r,masukanApp:e.target.value}))}
+                  onFocus={e=>e.target.style.borderColor="#4f46e5"}
+                  onBlur={e=>e.target.style.borderColor="#e2e8f0"}/>
+              </div>
+
+              <div style={{ display:"flex", gap:10 }}>
+                <button onClick={()=>setEditRow(null)}
+                  style={{ ...S.gBtn, flex:1, textAlign:"center", padding:"12px" }}>Batal</button>
+                <button onClick={()=>saveEdit(editRow)}
+                  style={{ ...S.pBtn, flex:2, marginTop:0, padding:"12px" }}>
+                  {saving ? "⏳ Menyimpan..." : "💾 Simpan Perubahan"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         <div style={{ width:"100%", maxWidth:700 }}>
 
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
@@ -764,7 +930,7 @@ export default function App() {
 
               {/* ── STACKED BAR CHART — Distribusi per Bulan ── */}
               {(() => {
-                const CAT_LABELS = ["Rendah","Sedang","Agak Tinggi","Tinggi","Tinggi Sekali"];
+                const CAT_LABELS = ["Sangat Rendah","Rendah","Sedang","Tinggi","Sangat Tinggi"];
                 const CAT_COLORS = ["#22c55e","#3b82f6","#f59e0b","#f97316","#ef4444"];
                 const bulanList = MONTHS.filter(m => filtered.some(r => r.bulan === m));
                 if (bulanList.length === 0) return null;
@@ -1023,6 +1189,14 @@ export default function App() {
                                 {r.masukanApp ? <span title={r.masukanApp}>{r.masukanApp.length>30?r.masukanApp.slice(0,30)+"…":r.masukanApp}</span> : "-"}
                               </td>
                               <td style={{ padding:"10px 8px" }}>
+                                <div style={{ display:"flex", gap:6 }}>
+                                <button
+                                  onClick={()=>setEditRow({...r})}
+                                  style={{ background:"#eef2ff", color:"#4f46e5", border:"none",
+                                    borderRadius:7, padding:"4px 9px", fontSize:11, fontWeight:700,
+                                    cursor:"pointer", fontFamily:"inherit" }}>
+                                  ✏️ Edit
+                                </button>
                                 <button
                                   onClick={async()=>{
                                     if(window.confirm(`Hapus data milik ${r.name}?`)){
@@ -1035,8 +1209,9 @@ export default function App() {
                                   style={{ background:"#fee2e2", color:"#ef4444", border:"none",
                                     borderRadius:7, padding:"4px 9px", fontSize:11, fontWeight:700,
                                     cursor:"pointer", fontFamily:"inherit", whiteSpace:"nowrap" }}>
-                                  ✕ Hapus
+                                  ✕
                                 </button>
+                                </div>
                               </td>
                             </tr>
                           );
