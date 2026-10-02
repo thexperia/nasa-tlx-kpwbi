@@ -1166,7 +1166,7 @@ export default function App() {
                 display:"flex", gap:10, alignItems:"flex-start" }}>
                 <span style={{ fontSize:16, lineHeight:1.3 }}>ℹ️</span>
                 <p style={{ fontSize:12, color:"#5f5d80", margin:0, lineHeight:1.6 }}>
-                  Data yang diinput akan menjadi bahan input dan evaluasi bagi Pimpinan dan Line Manager.
+                  Data yang diinput akan menjadi bahan input dan evaluasi bagi Line Manager.
                 </p>
               </div>
             </div>
